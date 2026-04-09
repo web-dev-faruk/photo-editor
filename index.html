@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>NOBO BORSHO 1433</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #e9ecef; margin: 0; padding: 10px; }
+        .editor-container { background: white; padding: 15px; border-radius: 15px; display: inline-block; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 95%; max-width: 500px; }
+        canvas { border: 2px solid #ddd; margin-top: 15px; max-width: 100%; cursor: move; touch-action: none; border-radius: 5px; }
+        .controls { margin: 15px 0; background: #f8f9fa; padding: 10px; border-radius: 10px; }
+        input[type="range"] { width: 100%; max-width: 250px; height: 15px; }
+        .btn { padding: 12px 25px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; margin-top: 10px; }
+        label { font-weight: bold; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="editor-container">
+        <h3>শুভ নববর্ষ-১৪৩৩</h3>
+        
+        <div class="controls">
+            আপনার ছবি বাছাই করুন
+            <input type="file" id="upload" accept="image/*"><br><br>
+            <label>আপনার ছবি টাচ করে এবং টেনে ফ্রেমের সাথে মিলিয়ে নিন</label><br>
+            <input type="range" id="zoomBar" min="0.1" max="5" step="0.01" value="1">
+        </div>
+
+        <canvas id="mainCanvas"></canvas>
+        
+        <br>
+        <button id="downloadBtn" class="btn" style="display:none;">ছবিটি ডাউনলোড করুন</button>
+        <p id="hint" style="color: #666; font-size: 12px; display:none;"></p>
+    </div>
+
+    <script>
+        const upload = document.getElementById('upload');
+        const zoomBar = document.getElementById('zoomBar');
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const hint = document.getElementById('hint');
+
+        let userImage = new Image();
+        let frameImage = new Image();
+        let isImageLoaded = false;
+
+        let imgX = 0, imgY = 0;
+        let scale = 1;
+        let isDragging = false;
+        let startX, startY;
+        let initialPinchDistance = null;
+
+        frameImage.src = 'frame.png'; 
+        frameImage.onload = () => {
+            canvas.width = frameImage.width;
+            canvas.height = frameImage.height;
+            drawInitial();
+        };
+
+        function drawInitial() {
+            ctx.fillStyle = "#ddd";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(frameImage, 0, 0);
+        }
+
+        upload.addEventListener('change', (e) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                userImage.onload = () => {
+                    isImageLoaded = true;
+                    imgX = (canvas.width - userImage.width) / 2;
+                    imgY = (canvas.height - userImage.height) / 2;
+                    scale = 1;
+                    zoomBar.value = 1;
+                    updateCanvas();
+                    downloadBtn.style.display = 'inline-block';
+                    hint.style.display = 'block';
+                };
+                userImage.src = event.target.result;
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        });
+
+        function updateCanvas() {
+            if (!isImageLoaded) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const w = userImage.width * scale;
+            const h = userImage.height * scale;
+
+            ctx.drawImage(userImage, imgX, imgY, w, h);
+            ctx.drawImage(frameImage, 0, 0, canvas.width, canvas.height);
+        }
+
+        // মাউস এবং সিঙ্গেল টাচ ড্র্যাগিং
+        const startAction = (x, y) => {
+            isDragging = true;
+            startX = x - imgX;
+            startY = y - imgY;
+        };
+
+        const moveAction = (x, y) => {
+            if (isDragging) {
+                imgX = x - startX;
+                imgY = y - startY;
+                updateCanvas();
+            }
+        };
+
+        // মাউস ইভেন্ট
+        canvas.addEventListener('mousedown', (e) => startAction(e.offsetX, e.offsetY));
+        window.addEventListener('mouseup', () => isDragging = false);
+        canvas.addEventListener('mousemove', (e) => moveAction(e.offsetX, e.offsetY));
+
+        // টাচ ইভেন্ট (মোবাইলের জন্য)
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                startAction(touch.clientX - rect.left, touch.clientY - rect.top);
+            } else if (e.touches.length === 2) {
+                // পিঞ্চ জুম শুরু
+                initialPinchDistance = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+            }
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                moveAction(touch.clientX - rect.left, touch.clientY - rect.top);
+            } else if (e.touches.length === 2 && isImageLoaded) {
+                // পিঞ্চ জুম প্রসেস
+                const currentDistance = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                
+                if (initialPinchDistance !== null) {
+                    const delta = currentDistance / initialPinchDistance;
+                    scale *= delta;
+                    zoomBar.value = scale; // স্লাইডার আপডেট করা
+                    initialPinchDistance = currentDistance;
+                    updateCanvas();
+                }
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', () => {
+            isDragging = false;
+            initialPinchDistance = null;
+        });
+
+        // স্লাইডার জুম
+        zoomBar.addEventListener('input', () => {
+            scale = parseFloat(zoomBar.value);
+            updateCanvas();
+        });
+
+        // ডাউনলোড
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'frame_photo.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+    </script>
+</body>
+</html>
